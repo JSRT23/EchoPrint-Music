@@ -1,0 +1,24 @@
+/* SweetAlert2 — tema Echoprint */
+.swal-echoprint-popup {
+    border-radius: 20px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 229, 255, 0.05) !important;
+    font-family: inherit !important;
+}
+
+.swal-echoprint-close {
+    color: rgba(255, 255, 255, 0.4) !important;
+    font-size: 1.1rem !important;
+    top: 12px !important;
+    right: 14px !important;
+}
+
+.swal-echoprint-close:hover {
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px !important;
+}
+
+.swal2-backdrop-show {
+    backdrop-filter: blur(8px) !important;
+}
