@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,jsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}", // 🔥 incluye todo para evitar purge agresivo
+  ],
   theme: {
     extend: {
       fontFamily: {
@@ -49,15 +52,27 @@ export default {
           from: { boxShadow: "0 0 40px rgba(0,229,255,0.4)" },
           to: { boxShadow: "0 0 80px rgba(0,229,255,0.8)" },
         },
-        fadeIn: { from: { opacity: 0 }, to: { opacity: 1 } },
+        fadeIn: {
+          from: { opacity: 0 },
+          to: { opacity: 1 },
+        },
         slideUp: {
           from: { transform: "translateY(20px) scale(0.97)", opacity: 0 },
           to: { transform: "translateY(0) scale(1)", opacity: 1 },
         },
-        wave: { from: { height: "4px" }, to: { height: "22px" } },
+        wave: {
+          from: { height: "4px" },
+          to: { height: "22px" },
+        },
       },
-      backdropBlur: { xs: "4px" },
+      backdropBlur: {
+        xs: "4px",
+      },
     },
   },
+
+  // 🔥 evita que Tailwind borre clases dinámicas si las usas
+  safelist: ["bg-cyan", "bg-violet", "text-cyan", "text-violet"],
+
   plugins: [],
 };
