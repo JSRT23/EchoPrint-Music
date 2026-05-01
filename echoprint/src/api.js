@@ -171,14 +171,23 @@ export const spotify = {
     return data.auth_url;
   },
 
-  async saveTrack(spotifyTrackId) {
+  async saveTrack(spotifyTrackId, playlistId = null) {
+    const body = { spotify_track_id: spotifyTrackId };
+    if (playlistId) body.playlist_id = playlistId;
     const res = await apiFetch("/spotify/save/", {
       method: "POST",
-      body: JSON.stringify({ spotify_track_id: spotifyTrackId }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) throw data;
     return data;
+  },
+
+  async getPlaylists() {
+    const res = await apiFetch("/spotify/playlists/");
+    const data = await res.json();
+    if (!res.ok) throw data;
+    return data.playlists ?? [];
   },
 
   async profile() {
@@ -200,6 +209,16 @@ export const spotify = {
     const res = await apiFetch("/spotify/disconnect/", { method: "POST" });
     if (!res.ok) throw await res.json();
     return res.json();
+  },
+
+  async likeTrack(spotifyTrackId) {
+    const res = await apiFetch("/spotify/like/", {
+      method: "POST",
+      body: JSON.stringify({ spotify_track_id: spotifyTrackId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw data;
+    return data;
   },
 };
 

@@ -192,6 +192,8 @@ export default function SongDetailModal({
   const [lyricsData, setLyricsData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const [liked, setLiked] = useState(false);
   const prevId = useRef(null);
   const { current, duration } = useAudioProgress(audioRef, isPlaying);
   const pct = duration ? Math.min(100, (current / duration) * 100) : 0;
@@ -202,6 +204,7 @@ export default function SongDetailModal({
     prevId.current = id;
     setLyricsData(null);
     setSaved(false);
+    setLiked(false);
   }, [song]);
 
   useEffect(() => {
@@ -212,32 +215,310 @@ export default function SongDetailModal({
     );
   }, [song, lyricsData]);
 
-  async function handleSave() {
-    if (!song.spotify_id) return alert("Esta canción no tiene ID de Spotify.");
-    setSaving(true);
-    try {
-      await spotify.saveTrack(song.spotify_id);
-      setSaved(true);
-    } catch {
+  async function handleLike() {
+    if (!song.spotify_id) return;
+    if (!isAuthenticated) {
       Swal.fire({
         html: `<div style="text-align:center;padding:8px 0">
-          <div style="font-size:2rem;margin-bottom:12px">🔗</div>
-          <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 8px">No se pudo guardar</h3>
-          <p style="color:#8b8ba7;font-size:0.85rem;margin:0">
-            Conecta tu cuenta de Spotify en tu <strong style="color:#fff">Perfil</strong>
-            para guardar canciones directamente.
-          </p></div>`,
+          <div style="font-size:2rem;margin-bottom:10px">❤️</div>
+          <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 8px">Inicia sesión primero</h3>
+          <p style="color:#8b8ba7;font-size:0.85rem;margin:0">Necesitas una cuenta para guardar canciones.</p>
+        </div>`,
         background: "#16162a",
-        showConfirmButton: true,
-        confirmButtonText: "Ir al Perfil",
+        confirmButtonText: "Iniciar sesión",
+        confirmButtonColor: "#1DB954",
+        width: "300px",
+        padding: "1.25rem",
+        customClass: { popup: "swal-echoprint-popup" },
+      }).then((r) => {
+        if (r.isConfirmed) window.location.href = "/auth";
+      });
+      return;
+    }
+
+    setLiking(true);
+    try {
+      await spotify.likeTrack(song.spotify_id);
+
+      setLiked(true);
+      Swal.fire({
+        html: `<div style="text-align:center;padding:8px 0">
+          <div style="font-size:2.5rem;margin-bottom:8px">❤️</div>
+          <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 6px">¡Me gusta!</h3>
+          <p style="color:#8b8ba7;font-size:0.85rem;margin:0">"${song.title}" añadida a tus favoritos de Spotify.</p>
+        </div>`,
+        background: "#16162a",
+        confirmButtonColor: "#1DB954",
+        timer: 2000,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        width: "280px",
+        padding: "1.25rem",
+        customClass: { popup: "swal-echoprint-popup" },
+      });
+    } catch (err) {
+      const code = err?.code;
+      if (code === "not_connected") {
+        try {
+          const url = await spotify.getAuthUrl();
+          window.location.href = url;
+        } catch {
+          window.location.href = "/profile";
+        }
+        return;
+      }
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text:
+          err?.error ??
+          "No se pudo guardar en Me gusta. Intenta reconectar tu cuenta de Spotify.",
+        background: "#16162a",
+        color: "#fff",
+        confirmButtonColor: "#06B6D4",
+        width: "300px",
+        customClass: { popup: "swal-echoprint-popup" },
+      });
+    } finally {
+      setLiking(false);
+    }
+  }
+
+  async function handleSave() {
+    if (!song.spotify_id) return;
+    if (!isAuthenticated) {
+      Swal.fire({
+        html: `<div style="text-align:center;padding:8px 0">
+          <div style="width:48px;height:48px;border-radius:14px;background:rgba(29,185,84,0.12);
+               border:1px solid rgba(29,185,84,0.25);display:flex;align-items:center;
+               justify-content:center;margin:0 auto 14px">
+            <svg viewBox="0 0 24 24" fill="#1DB954" style="width:24px;height:24px">
+              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02z"/>
+            </svg>
+          </div>
+          <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 8px">Inicia sesión primero</h3>
+          <p style="color:#8b8ba7;font-size:0.85rem;margin:0">Necesitas una cuenta para guardar canciones.</p>
+        </div>`,
+        background: "#16162a",
+        confirmButtonText: "Iniciar sesión",
         confirmButtonColor: "#06B6D4",
         showCancelButton: true,
         cancelButtonText: "Cerrar",
         width: "300px",
         padding: "1.25rem",
         customClass: { popup: "swal-echoprint-popup" },
+      });
+      return;
+    }
+
+    setSaving(true);
+    let playlists = [];
+    try {
+      playlists = await spotify.getPlaylists();
+    } catch (err) {
+      // Not connected to Spotify
+      setSaving(false);
+      Swal.fire({
+        html: `<div style="text-align:center;padding:8px 0">
+          <div style="width:48px;height:48px;border-radius:14px;background:rgba(29,185,84,0.12);
+               border:1px solid rgba(29,185,84,0.25);display:flex;align-items:center;
+               justify-content:center;margin:0 auto 14px">
+            <svg viewBox="0 0 24 24" fill="#1DB954" style="width:24px;height:24px">
+              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+            </svg>
+          </div>
+          <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 8px">Conecta Spotify</h3>
+          <p style="color:#8b8ba7;font-size:0.85rem;margin:0">Conecta tu cuenta de Spotify para guardar canciones en tus playlists.</p>
+        </div>`,
+        background: "#16162a",
+        confirmButtonText: "Conectar Spotify",
+        confirmButtonColor: "#1DB954",
+        showCancelButton: true,
+        cancelButtonText: "Cerrar",
+        width: "300px",
+        padding: "1.25rem",
+        customClass: { popup: "swal-echoprint-popup" },
+      }).then(async (r) => {
+        if (!r.isConfirmed) return;
+        try {
+          const url = await spotify.getAuthUrl();
+          window.location.href = url;
+        } catch {
+          window.location.href = "/profile";
+        }
+      });
+      return;
+    }
+    setSaving(false);
+
+    // Build playlist options HTML
+    const echoItem = `
+      <div data-playlist-id="__echoprint__"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;
+               cursor:pointer;border:2px solid rgba(29,185,84,0.4);background:rgba(29,185,84,0.08);
+               margin-bottom:8px;transition:all .15s"
+        onmouseover="this.style.background='rgba(29,185,84,0.18)'"
+        onmouseout="this.style.background='rgba(29,185,84,0.08)'"
+        onclick="window._echoPick('__echoprint__')">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(29,185,84,0.2);
+                    display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 24 24" fill="#1DB954" style="width:18px;height:18px">
+            <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+          </svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <p style="color:#1DB954;font-weight:700;font-size:13px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            Echoprint – Mis Canciones
+          </p>
+          <p style="color:#6b6b8a;font-size:11px;margin:0">Playlist automática de Echoprint</p>
+        </div>
+      </div>`;
+
+    const playlistItems = playlists
+      .map((pl) => {
+        const img = pl.image
+          ? `<img src="${pl.image}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0"/>`
+          : `<div style="width:36px;height:36px;border-radius:8px;background:#2a2a3e;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+             <svg viewBox="0 0 24 24" fill="none" stroke="#6b6b8a" stroke-width="2" style="width:16px;height:16px"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+           </div>`;
+        return `
+        <div data-playlist-id="${pl.id}"
+          style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;
+                 cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);
+                 margin-bottom:6px;transition:all .15s"
+          onmouseover="this.style.background='rgba(255,255,255,0.07)';this.style.borderColor='rgba(255,255,255,0.15)'"
+          onmouseout="this.style.background='rgba(255,255,255,0.03)';this.style.borderColor='rgba(255,255,255,0.08)'"
+          onclick="window._echoPick('${pl.id}')">
+          ${img}
+          <div style="flex:1;min-width:0">
+            <p style="color:#fff;font-weight:600;font-size:13px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name}</p>
+            <p style="color:#6b6b8a;font-size:11px;margin:0">${pl.tracks_total} canciones</p>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    const { isConfirmed, isDismissed } = await new Promise((resolve) => {
+      window._echoPick = (id) => {
+        window._echoPickedId = id;
+        Swal.clickConfirm();
+      };
+      Swal.fire({
+        html: `
+          <div style="text-align:left">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:0 2px">
+              <img src="${song.cover}" style="width:42px;height:42px;border-radius:10px;object-fit:cover"/>
+              <div style="min-width:0">
+                <p style="color:#fff;font-weight:700;font-size:14px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${song.title}</p>
+                <p style="color:#8b8ba7;font-size:12px;margin:0">${song.artist}</p>
+              </div>
+            </div>
+            <p style="color:#6b6b8a;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px;padding:0 2px">
+              Guardar en playlist
+            </p>
+            <div style="max-height:280px;overflow-y:auto;padding-right:2px">
+              ${echoItem}
+              ${playlistItems}
+            </div>
+          </div>`,
+        background: "#16162a",
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: "Cancelar",
+        width: "340px",
+        padding: "1.25rem",
+        customClass: { popup: "swal-echoprint-popup" },
+      }).then(resolve);
+    });
+
+    const chosenId = window._echoPickedId;
+    delete window._echoPick;
+    delete window._echoPickedId;
+
+    if (!isConfirmed || !chosenId) return;
+
+    setSaving(true);
+    try {
+      const playlistIdToUse = chosenId === "__echoprint__" ? null : chosenId;
+      const result = await spotify.saveTrack(song.spotify_id, playlistIdToUse);
+      setSaved(true);
+
+      const isLikedSongs = result?.saved_as === "liked_songs";
+      const playlistName =
+        chosenId === "__echoprint__"
+          ? "Echoprint – Mis Canciones"
+          : (playlists.find((p) => p.id === chosenId)?.name ?? "tu playlist");
+
+      if (isLikedSongs) {
+        Swal.fire({
+          html: `<div style="text-align:center;padding:8px 0">
+            <div style="font-size:2rem;margin-bottom:10px">❤️</div>
+            <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 8px">¡Guardada en Me gusta!</h3>
+            <p style="color:#8b8ba7;font-size:0.82rem;margin:0;line-height:1.5">
+              "${song.title}" fue añadida a tus canciones favoritas de Spotify.<br/>
+              <span style="color:#6b6b8a;font-size:0.78rem">La app está en modo desarrollo — para guardar en playlists solicita
+              <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:#1DB954">Extended Quota</a> en el dashboard.</span>
+            </p>
+          </div>`,
+          background: "#16162a",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#1DB954",
+          width: "320px",
+          padding: "1.25rem",
+          customClass: { popup: "swal-echoprint-popup" },
+        });
+      } else {
+        Swal.fire({
+          icon: "success",
+          title: "¡Guardada!",
+          text: `"${song.title}" añadida a ${playlistName}.`,
+          background: "#16162a",
+          color: "#fff",
+          confirmButtonColor: "#1DB954",
+          timer: 2500,
+          timerProgressBar: true,
+          customClass: { popup: "swal-echoprint-popup" },
+        });
+      }
+    } catch (err) {
+      const code = err?.code;
+      const isScope = code === "insufficient_scope";
+      const isDisconnected = code === "not_connected";
+      Swal.fire({
+        html: `<div style="text-align:center;padding:8px 0">
+          <div style="width:48px;height:48px;border-radius:14px;background:rgba(29,185,84,0.12);
+               border:1px solid rgba(29,185,84,0.25);display:flex;align-items:center;
+               justify-content:center;margin:0 auto 14px">
+            <svg viewBox="0 0 24 24" fill="#1DB954" style="width:24px;height:24px">
+              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+            </svg>
+          </div>
+          <h3 style="color:#fff;font-size:1rem;font-weight:700;margin:0 0 8px">
+            ${isScope || isDisconnected ? "Reconecta Spotify" : "No se pudo guardar"}
+          </h3>
+          <p style="color:#8b8ba7;font-size:0.85rem;margin:0">
+            ${
+              isScope
+                ? "Tu sesión de Spotify no tiene permisos para editar playlists. Desconecta y vuelve a conectar tu cuenta."
+                : isDisconnected
+                  ? "Tu sesión de Spotify expiró. Vuelve a conectar tu cuenta."
+                  : "Ocurrió un error al guardar. Intenta de nuevo."
+            }
+          </p>
+        </div>`,
+        background: "#16162a",
+        confirmButtonText:
+          isScope || isDisconnected ? "Ir al Perfil" : "Cerrar",
+        confirmButtonColor: isScope || isDisconnected ? "#1DB954" : "#06B6D4",
+        showCancelButton: isScope || isDisconnected,
+        cancelButtonText: "Cerrar",
+        width: "300px",
+        padding: "1.25rem",
+        customClass: { popup: "swal-echoprint-popup" },
       }).then((r) => {
-        if (r.isConfirmed) window.location.href = "/profile";
+        if (r.isConfirmed && (isScope || isDisconnected)) {
+          window.location.href = "/profile";
+        }
       });
     } finally {
       setSaving(false);
@@ -364,7 +645,52 @@ export default function SongDetailModal({
                   </>
                 )}
               </button>
-              {/* Save */}
+              {/* Like (Me gusta Spotify) */}
+              {isAuthenticated && song.spotify_id && (
+                <button
+                  onClick={handleLike}
+                  disabled={liking || liked}
+                  title={
+                    liked ? "Ya en Me gusta" : "Añadir a Me gusta de Spotify"
+                  }
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all
+                    ${liked ? "border-red-400/40 text-red-400 bg-red-400/10" : "border-white/10 text-muted hover:text-red-400 hover:border-red-400/30 hover:bg-red-400/5"}`}
+                >
+                  {liking ? (
+                    <svg
+                      className="w-4 h-4 animate-spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeOpacity="0.25"
+                      />
+                      <path
+                        d="M12 2a10 10 0 0110 10"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill={liked ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="w-4 h-4"
+                    >
+                      <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              {/* Save to playlist */}
               {isAuthenticated && song.spotify_id && (
                 <button
                   onClick={handleSave}
