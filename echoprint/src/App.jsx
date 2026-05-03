@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
 import { AuthProvider } from "./AuthContext";
-import { songs as songsApi } from "./api";
+import { songs as songsApi, fetchItunesPreview } from "./api"; // FIX: import desde api.js
 import Layout from "./components/Layout";
 import NowPlayingBar from "./components/NowPlayingBar";
 import SongDetailModal from "./components/SongDetailModal";
@@ -12,50 +12,6 @@ import HistoryPage from "./pages/HistoryPage";
 import FullHistoryPage from "./pages/FullHistoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import { useAuth } from "./AuthContext";
-// Normaliza texto para comparación: quita tildes, minúsculas, sin símbolos
-function itunesNorm(s) {
-  return (s || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function fetchItunesPreview(title, artist) {
-  try {
-    const q = encodeURIComponent(`${title} ${artist}`);
-    const r = await fetch(
-      `https://itunes.apple.com/search?term=${q}&media=music&entity=song&limit=10`,
-      { signal: AbortSignal.timeout(6000) },
-    );
-    if (!r.ok) return null;
-    const data = await r.json();
-    const results = (data.results ?? []).filter((t) => t.previewUrl);
-    if (!results.length) return null;
-
-    const tTitle = itunesNorm(title);
-    const tArtist = itunesNorm(artist);
-
-    // Solo usamos el preview si AMBOS coinciden: titulo Y artista.
-    // Si no hay match exacto → null → se muestra la alerta con los 3 servicios.
-    const match = results.find((t) => {
-      const rt = itunesNorm(t.trackName);
-      const ra = itunesNorm(t.artistName);
-      const titleOk =
-        rt === tTitle || rt.includes(tTitle) || tTitle.includes(rt);
-      const artistWords = tArtist.split(" ").filter((w) => w.length > 2);
-      const artistOk =
-        ra.includes(tArtist) || artistWords.some((w) => ra.includes(w));
-      return titleOk && artistOk;
-    });
-
-    return match ? match.previewUrl : null;
-  } catch {
-    return null;
-  }
-}
 
 const PREVIEW_SECONDS_SCAN = 30;
 const PREVIEW_SECONDS_SEARCH = 35;
@@ -109,7 +65,6 @@ function showNoPreviewAlert(song) {
   });
 }
 
-// Normaliza texto para comparación: quita tildes, minúsculas, sin símbolos
 function BackgroundOrbs() {
   return (
     <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -174,7 +129,6 @@ function AppInner() {
   const audioRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Current tab from route
   const activeTab =
     location.pathname === "/history" || location.pathname === "/history/all"
       ? "history"
@@ -203,10 +157,6 @@ function AppInner() {
       audio.load();
       const startAt = playingSong._startAt ?? 0;
       const onReady = () => {
-        // Solo hacer seek si el startAt cabe dentro del preview.
-        // Los previews de iTunes duran ~30s; si match_timestamp_seconds
-        // es mayor que la duración del preview, arrancamos desde 0
-        // para que suenen los 30s completos en lugar de los últimos 5s.
         if (startAt > 0 && startAt < audio.duration - 3) {
           audio.currentTime = startAt;
         }
@@ -220,7 +170,6 @@ function AppInner() {
       timerRef.current = setTimeout(() => {
         audio.pause();
         setPreviewEnded(true);
-        // playingSong intentionally kept so the bar shows the CTA
       }, limitMs);
     } else {
       audio.pause();
@@ -231,8 +180,8 @@ function AppInner() {
   const handlePlay = useCallback(
     async (song, startAt = 0) => {
       const id = song.spotify_id ?? song.id;
-      // Si la misma canción ya está sonando → pausar siempre,
-      // sin importar el startAt (evita que "Pausar" reinicie el audio)
+
+      // FIX: si la misma canción ya está sonando → pausar
       if (playingId === id && !previewEnded) {
         clearTimeout(timerRef.current);
         audioRef.current?.pause();
@@ -240,22 +189,26 @@ function AppInner() {
         setPlayingSong(null);
         return;
       }
+
       setPreviewEnded(false);
+      // FIX: setPlayingId ANTES de buscar iTunes para dar feedback visual inmediato
       setPlayingId(id);
+
       let enriched = song;
       if (!song.preview_url) {
         const url = await fetchItunesPreview(song.title, song.artist);
-        if (url) enriched = { ...song, preview_url: url };
-        else {
+        if (url) {
+          enriched = { ...song, preview_url: url };
+        } else {
+          // FIX: limpiar playingId ANTES de mostrar la alerta
           setPlayingId(null);
           showNoPreviewAlert(song);
           return;
         }
       }
+
       setPlayingSong({ ...enriched, _startAt: startAt });
 
-      // Guardar en historial si viene de búsqueda de texto (no del reconocedor)
-      // Las del reconocedor ya se guardan en el backend al identificarlas
       const isFromScan = enriched.match_timestamp_seconds != null;
       if (!isFromScan && user) {
         songsApi.addToHistory(enriched).catch(() => {});
@@ -271,11 +224,9 @@ function AppInner() {
     setPreviewEnded(false);
   }
 
-  // Audio ended naturally → show "preview ended" CTA, keep song info visible
   function handleAudioEnded() {
     clearTimeout(timerRef.current);
     setPreviewEnded(true);
-    // playingSong stays so NowPlayingBar can show the rotating service buttons
   }
 
   const handleOpenDetail = useCallback((song, score = null) => {
@@ -291,7 +242,6 @@ function AppInner() {
 
   const isPlaying = (id) => playingId === id && !previewEnded;
 
-  // Shared props passed to every page
   const pageProps = {
     onPlay: handlePlay,
     playingId,
