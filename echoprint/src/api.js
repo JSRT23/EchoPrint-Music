@@ -282,12 +282,18 @@ function itunesNorm(s) {
     .trim();
 }
 
+/**
+ * Busca un preview de iTunes para la canción dada.
+ * FIX: Usa el proxy del backend (/api/songs/itunes/) en lugar de llamar
+ * directamente a itunes.apple.com — evita errores CORS en móvil y algunos
+ * browsers que bloquean el redirect al scheme musics://.
+ */
 export async function fetchItunesPreview(title, artist) {
   try {
-    const q = encodeURIComponent(`${title} ${artist}`);
+    const term = `${title} ${artist}`;
     const r = await fetch(
-      `https://itunes.apple.com/search?term=${q}&media=music&entity=song&limit=10`,
-      { signal: makeTimeoutSignal(6000) },
+      `${BASE_URL}/songs/itunes/?term=${encodeURIComponent(term)}`,
+      { signal: makeTimeoutSignal(8000) },
     );
     if (!r.ok) return null;
     const data = await r.json();
