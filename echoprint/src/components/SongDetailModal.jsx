@@ -819,26 +819,41 @@ export default function SongDetailModal({
 }
 
 // ── Lyrics fetch ──────────────────────────────────────────────────────────────
+// FIX: AbortSignal.timeout no existe en todos los browsers — usar AbortController manual
+function makeAbortSignal(ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  ctrl.signal.addEventListener("abort", () => clearTimeout(t));
+  return ctrl.signal;
+}
+
 async function fetchLyrics(artist, title) {
+  // 1️⃣ lrclib.net — plain lyrics (no LRC)
   try {
     const r = await fetch(
       `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`,
-      { signal: AbortSignal.timeout(6000) },
+      { signal: makeAbortSignal(7000) },
     );
     if (r.ok) {
       const d = await r.json();
-      if (d.lyrics) return { plain: d.lyrics };
+      // lrclib devuelve plainLyrics o lyrics (sincronizado)
+      const text = d.plainLyrics ?? d.lyrics ?? null;
+      if (text && text.trim().length > 10) return { plain: text.trim() };
     }
   } catch {}
+
+  // 2️⃣ lyrics.ovh — fallback
   try {
     const r = await fetch(
       `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`,
-      { signal: AbortSignal.timeout(5000) },
+      { signal: makeAbortSignal(6000) },
     );
     if (r.ok) {
       const d = await r.json();
-      if (d.lyrics) return { plain: d.lyrics.trim() };
+      if (d.lyrics && d.lyrics.trim().length > 10)
+        return { plain: d.lyrics.trim() };
     }
   } catch {}
+
   return null;
 }

@@ -20,6 +20,12 @@ function isLast7Days(dateStr) {
   cutoff.setDate(cutoff.getDate() - 7);
   return d >= cutoff && !isToday(dateStr);
 }
+function isOlder(dateStr) {
+  const d = new Date(dateStr);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  return d < cutoff;
+}
 
 function SectionLabel({ children }) {
   return (
@@ -165,7 +171,9 @@ export default function HistoryPage({
 
   const todayItems = items.filter((s) => isToday(s._scannedAt));
   const weekItems = items.filter((s) => isLast7Days(s._scannedAt));
-  const hasAny = todayItems.length > 0 || weekItems.length > 0;
+  const olderItems = items.filter((s) => isOlder(s._scannedAt));
+  const hasAny =
+    todayItems.length > 0 || weekItems.length > 0 || olderItems.length > 0;
 
   return (
     <section className="pt-8 pb-32">
@@ -258,6 +266,27 @@ export default function HistoryPage({
                 {weekItems.map((song, i) => (
                   <SongCard
                     key={`week-${song._historyId ?? song.id}-${i}`}
+                    song={song}
+                    onPlay={onPlay}
+                    isPlaying={playingId === (song.spotify_id ?? song.id)}
+                    isAuthenticated
+                    onOpenDetail={onOpenDetail}
+                    {...methodProps(song._method)}
+                    historyId={song._historyId}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {olderItems.length > 0 && (
+            <div>
+              <SectionLabel>Anteriores</SectionLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {olderItems.map((song, i) => (
+                  <SongCard
+                    key={`older-${song._historyId ?? song.id}-${i}`}
                     song={song}
                     onPlay={onPlay}
                     isPlaying={playingId === (song.spotify_id ?? song.id)}

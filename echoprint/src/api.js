@@ -101,10 +101,36 @@ export const auth = {
 // ─── SONGS ──────────────────────────────────
 export const songs = {
   async history() {
-    const res = await apiFetch("/songs/history/");
-    const data = await res.json();
-    if (!res.ok) throw data;
-    return data.results ?? data;
+    // Consume todas las páginas si el backend devuelve respuesta paginada
+    let url = "/songs/history/";
+    let allResults = [];
+
+    while (url) {
+      const res = await apiFetch(url);
+      const data = await res.json();
+      if (!res.ok) throw data;
+
+      if (Array.isArray(data)) {
+        // Respuesta directa sin paginación
+        return data;
+      }
+
+      allResults = allResults.concat(data.results ?? []);
+
+      // Si hay página siguiente, extraer solo el path+query para apiFetch
+      if (data.next) {
+        try {
+          const nextUrl = new URL(data.next);
+          url = nextUrl.pathname.replace(/^\/api/, "") + nextUrl.search;
+        } catch {
+          url = null;
+        }
+      } else {
+        url = null;
+      }
+    }
+
+    return allResults;
   },
 
   async stats() {

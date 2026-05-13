@@ -181,7 +181,7 @@ function AppInner() {
     async (song, startAt = 0) => {
       const id = song.spotify_id ?? song.id;
 
-      // FIX: si la misma canción ya está sonando → pausar
+      // Si la misma canción ya está sonando → pausar
       if (playingId === id && !previewEnded) {
         clearTimeout(timerRef.current);
         audioRef.current?.pause();
@@ -191,7 +191,6 @@ function AppInner() {
       }
 
       setPreviewEnded(false);
-      // FIX: setPlayingId ANTES de buscar iTunes para dar feedback visual inmediato
       setPlayingId(id);
 
       let enriched = song;
@@ -200,15 +199,21 @@ function AppInner() {
         if (url) {
           enriched = { ...song, preview_url: url };
         } else {
-          // FIX: limpiar playingId ANTES de mostrar la alerta
           setPlayingId(null);
           showNoPreviewAlert(song);
+          // ── Sin preview pero igual registramos en historial si es búsqueda de texto ──
+          const isFromScan = song.match_timestamp_seconds != null;
+          if (!isFromScan && user) {
+            songsApi.addToHistory(song).catch(() => {});
+          }
           return;
         }
       }
 
       setPlayingSong({ ...enriched, _startAt: startAt });
 
+      // Registrar en historial solo canciones de búsqueda de texto
+      // (las de scan/humming ya las guarda el backend en el endpoint /recognize/)
       const isFromScan = enriched.match_timestamp_seconds != null;
       if (!isFromScan && user) {
         songsApi.addToHistory(enriched).catch(() => {});
