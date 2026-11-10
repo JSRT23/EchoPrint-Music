@@ -1,0 +1,28 @@
+# Producción local:  docker compose up --build                      -> http://localhost:8080
+# Desarrollo (HMR):  docker compose --profile dev up --build dev   -> http://localhost:5173
+services:
+  web:
+    build:
+      context: echoprint
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    container_name: echoprint-music-web
+    ports:
+      - "${PORT:-8080}:80"
+    restart: unless-stopped
+
+  dev:
+    profiles: ["dev"]
+    build:
+      context: echoprint
+      dockerfile: Dockerfile.dev
+    container_name: echoprint-music-dev
+    ports:
+      - "${DEV_PORT:-5173}:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=${VITE_API_URL:-}
+    volumes:
+      - ./echoprint:/app
+      - /app/node_modules
